@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XSD Visualizer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.29.0/dist/tabler-icons.min.css">
+<style>
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --surface2: #f9f8f5;
+  --border: rgba(0,0,0,0.10);
+  --border2: rgba(0,0,0,0.18);
+  --text: #1c1c1a;
+  --text2: #5a5a56;
+  --text3: #9a9892;
+  --radius: 7px;
+  --radius-lg: 12px;
+
+  --element-c: #185FA5;   --element-bg: #E6F1FB;   --element-b: #B5D4F4;
+  --complex-c: #4F47B0;   --complex-bg: #EEEDFE;   --complex-b: #CECBF6;
+  --simple-c:  #2E6610;   --simple-bg:  #EAF3DE;   --simple-b:  #C0DD97;
+  --seq-c:     #0D6650;   --seq-bg:     #E1F5EE;    --seq-b:     #9FE1CB;
+  --choice-c:  #A86A10;   --choice-bg:  #FAEEDA;    --choice-b:  #FAC775;
+  --all-c:     #903818;   --all-bg:     #FAECE7;    --all-b:     #F5C4B3;
+  --attr-c:    #50504c;   --attr-bg:    #F1EFE8;    --attr-b:    #D3D1C7;
+  --group-c:   #8C2F4E;   --group-bg:   #FBEAF0;    --group-b:   #F4C0D1;
+  --enum-c:    #2E6610;   --enum-bg:    #EAF3DE;    --enum-b:    #C0DD97;
+  --other-c:   #50504c;   --other-bg:   #F1EFE8;    --other-b:   #D3D1C7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111110;
+    --surface: #1e1e1c;
+    --surface2: #242422;
+    --border: rgba(255,255,255,0.09);
+    --border2: rgba(255,255,255,0.18);
+    --text: #e4e2db;
+    --text2: #9a9892;
+    --text3: #5a5a56;
+
+    --element-c: #85B7EB;  --element-bg: #0C3A6A;  --element-b: #185FA5;
+    --complex-c: #AFA9EC;  --complex-bg: #322d7a;  --complex-b: #4F47B0;
+    --simple-c:  #97C459;  --simple-bg:  #1e4208;  --simple-b:  #2E6610;
+    --seq-c:     #5DCAA5;  --seq-bg:     #063d2e;  --seq-b:     #0D6650;
+    --choice-c:  #EF9F27;  --choice-bg:  #4a2c04;  --choice-b:  #A86A10;
+    --all-c:     #F0997B;  --all-bg:     #4a1c08;  --all-b:     #903818;
+    --attr-c:    #B4B2A9;  --attr-bg:    #2e2e2c;  --attr-b:    #50504c;
+    --group-c:   #ED93B1;  --group-bg:   #4a1428;  --group-b:   #8C2F4E;
+    --enum-c:    #97C459;  --enum-bg:    #1e4208;  --enum-b:    #2E6610;
+    --other-c:   #B4B2A9;  --other-bg:   #2e2e2c;  --other-b:   #50504c;
+  }
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+
+.app{display:grid;grid-template-rows:50px 1fr;height:100vh}
+
+header{
+  background:var(--surface);border-bottom:0.5px solid var(--border2);
+  display:flex;align-items:center;gap:10px;padding:0 18px;
+  box-shadow:0 1px 3px rgba(0,0,0,0.06);z-index:20
+}
+header h1{font-size:15px;font-weight:500}
+header .sub{font-size:12px;color:var(--text3);margin-left:2px}
+
+.body{display:grid;grid-template-columns:400px 1fr;height:100%;overflow:hidden}
+
+/* ---- LEFT PANEL ---- */
+.left{
+  display:flex;flex-direction:column;
+  background:var(--surface);border-right:0.5px solid var(--border2);
+  overflow:hidden
+}
+
+.url-section{padding:16px 16px 12px;border-bottom:0.5px solid var(--border)}
+
+.url-label{
+  font-size:11px;font-weight:500;color:var(--text3);
+  text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;display:block
+}
+
+.url-row{display:flex;gap:8px;align-items:center}
+
+#url-input{
+  flex:1;padding:9px 12px;
+  border:0.5px solid var(--border2);border-radius:var(--radius);
+  background:var(--surface2);color:var(--text);font-size:13px;outline:none;
+  font-family:inherit;transition:border-color 0.15s
+}
+#url-input:focus{border-color:var(--element-c)}
+#url-input::placeholder{color:var(--text3)}
+
+.btn{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:8px 13px;border-radius:var(--radius);font-size:13px;font-weight:500;
+  cursor:pointer;border:0.5px solid var(--border2);
+  background:transparent;color:var(--text);transition:background 0.12s;white-space:nowrap
+}
+.btn:hover{background:var(--surface2)}
+.btn.primary{background:var(--element-c);color:#fff;border-color:transparent}
+.btn.primary:hover{opacity:0.88}
+.btn:disabled{opacity:0.45;cursor:not-allowed}
+.btn i{font-size:15px}
+.btn.sm{padding:5px 10px;font-size:12px}
+.btn.sm i{font-size:13px}
+
+/* Status bar under URL input */
+.url-status{
+  margin-top:8px;font-size:12px;min-height:18px;display:flex;align-items:center;gap:6px
+}
+.url-status.loading{color:var(--element-c)}
+.url-status.error{color:var(--all-c)}
+.url-status.ok{color:var(--seq-c)}
+.url-status i{font-size:14px}
+
+.spin{
+  display:inline-block;animation:spin 0.8s linear infinite
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* History section */
+.history-section{flex:1;overflow:auto;padding:12px 16px}
+
+.history-title{
+  font-size:11px;font-weight:500;color:var(--text3);
+  text-transform:uppercase;letter-spacing:0.6px;
+  margin-bottom:8px;display:flex;align-items:center;justify-content:space-between
+}
+
+.history-empty{
+  font-size:12px;color:var(--text3);font-style:italic;padding:8px 0
+}
+
+.hist-item{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 10px;border-radius:var(--radius);cursor:pointer;
+  border:0.5px solid transparent;transition:background 0.1s,border-color 0.1s;
+  margin-bottom:4px
+}
+.hist-item:hover{background:var(--surface2);border-color:var(--border)}
+
+.hist-url{
+  flex:1;font-size:11px;font-family:'Menlo','Courier New',monospace;
+  color:var(--element-c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.hist-time{font-size:10px;color:var(--text3);white-space:nowrap}
+.hist-del{
+  font-size:14px;color:var(--text3);opacity:0;cursor:pointer;padding:2px;
+  background:none;border:none;transition:opacity 0.1s
+}
+.hist-item:hover .hist-del{opacity:1}
+.hist-del:hover{color:var(--all-c)!important}
+
+/* ---- RIGHT PANEL ---- */
+.right{overflow:auto;padding:20px;background:var(--bg)}
+
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;gap:14px;color:var(--text3);text-align:center
+}
+.empty-state i{font-size:52px;opacity:0.3}
+.empty-state p{font-size:14px;max-width:280px}
+.empty-state code{font-size:12px;background:var(--surface2);padding:3px 7px;border-radius:5px;color:var(--text2)}
+
+/* loaded header */
+.loaded-header{
+  display:flex;align-items:center;gap:10px;margin-bottom:14px;
+  padding:10px 14px;background:var(--surface);border-radius:var(--radius-lg);
+  border:0.5px solid var(--border)
+}
+.loaded-url{
+  flex:1;font-size:12px;font-family:'Menlo','Courier New',monospace;
+  color:var(--element-c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.loaded-header .reload-btn{flex-shrink:0}
+
+.stats-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.stat-pill{
+  display:flex;align-items:center;gap:8px;
+  padding:7px 12px;border-radius:var(--radius-lg);border:0.5px solid;font-size:12px
+}
+.stat-pill .num{font-size:18px;font-weight:500;line-height:1}
+.stat-pill .lbl{opacity:0.75;font-size:11px;margin-top:1px}
+
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px}
+.toolbar .sep{width:1px;height:20px;background:var(--border2);margin:0 2px}
+
+.search-wrap{position:relative;flex:1;max-width:260px}
+.search-wrap i{
+  position:absolute;left:8px;top:50%;transform:translateY(-50%);
+  font-size:14px;color:var(--text3);pointer-events:none
+}
+#search-input{
+  width:100%;padding:5px 8px 5px 28px;border-radius:var(--radius);
+  border:0.5px solid var(--border2);background:var(--surface);
+  color:var(--text);font-size:12px;outline:none
+}
+#search-input:focus{border-color:var(--element-c)}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.leg-item{
+  display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);
+  cursor:pointer;padding:3px 7px;border-radius:5px;transition:background 0.1s
+}
+.leg-item:hover{background:var(--surface)}
+.leg-dot{width:8px;height:8px;border-radius:3px;flex-shrink:0}
+
+.error-box{
+  background:var(--all-bg);color:var(--all-c);
+  border:0.5px solid var(--all-b);border-radius:var(--radius);
+  padding:14px 16px;font-size:13px;display:flex;gap:10px;align-items:flex-start
+}
+.error-box i{font-size:18px;flex-shrink:0;margin-top:1px}
+
+/* ---- TREE ---- */
+.tree-node{margin:1px 0}
+
+.node-row{
+  display:flex;align-items:center;gap:6px;
+  padding:3px 7px;border-radius:var(--radius);
+  cursor:pointer;user-select:none;transition:background 0.1s;min-height:28px
+}
+.node-row:hover{background:var(--surface)}
+.node-row.highlighted{background:rgba(255,200,0,0.12);outline:1px solid rgba(255,200,0,0.35)}
+
+.chevron{
+  width:14px;height:14px;display:flex;align-items:center;justify-content:center;
+  color:var(--text3);font-size:11px;flex-shrink:0;transition:transform 0.15s
+}
+.chevron.open{transform:rotate(90deg)}
+.chevron.leaf{opacity:0}
+
+.type-icon{
+  width:22px;height:22px;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0
+}
+.kw-badge{
+  font-size:10px;font-weight:500;padding:2px 6px;border-radius:4px;
+  font-family:'Menlo',monospace;flex-shrink:0
+}
+.node-name{font-weight:500;font-size:13px;white-space:nowrap}
+.node-name.anon{color:var(--text3);font-style:italic;font-weight:400}
+.type-badge{
+  font-size:10px;padding:1px 6px;border-radius:9px;
+  font-family:'Menlo',monospace;white-space:nowrap
+}
+.occurs-badge{
+  font-size:10px;padding:1px 6px;border-radius:9px;
+  background:var(--surface2);border:0.5px solid var(--border);
+  color:var(--text2);font-family:monospace;white-space:nowrap
+}
+.occurs-badge.optional{color:var(--seq-c)}
+.occurs-badge.multi{color:var(--choice-c)}
+.use-badge{
+  font-size:10px;padding:1px 6px;border-radius:9px;
+  background:var(--element-bg);border:0.5px solid var(--element-b);
+  color:var(--element-c);white-space:nowrap
+}
+.doc-text{
+  font-size:11px;color:var(--text3);font-style:italic;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px
+}
+.node-children{
+  padding-left:22px;border-left:1.5px solid var(--border);margin-left:17px
+}
+.node-children.collapsed{display:none}
+.choice-wrapper>.node-children{border-left-color:var(--choice-b);border-left-style:dashed}
+.node-hidden{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <i class="ti ti-layout-tree" style="font-size:22px;color:var(--element-c)"></i>
+  <h1>XSD Visualizer</h1>
+  <span class="sub">— segmenten, elementen &amp; keuzes</span>
+</header>
+
+<div class="body">
+
+  <!-- LEFT: URL input + history -->
+  <div class="left">
+    <div class="url-section">
+      <span class="url-label">XSD locatie (URL)</span>
+      <div class="url-row">
+        <input type="url" id="url-input"
+          placeholder="https://example.com/schema.xsd"
+          autocomplete="off" spellcheck="false"
+          onkeydown="if(event.key==='Enter')loadFromUrl()">
+        <button class="btn primary" id="load-btn" onclick="loadFromUrl()">
+          <i class="ti ti-download"></i> Laden
+        </button>
+      </div>
+      <div class="url-status" id="url-status"></div>
+    </div>
+
+    <div class="history-section">
+      <div class="history-title">
+        <span>Recente URL's</span>
+        <button class="btn sm" onclick="clearHistory()" style="opacity:0.6" title="Geschiedenis wissen">
+          <i class="ti ti-trash"></i>
+        </button>
+      </div>
+      <div id="history-list">
+        <div class="history-empty">Nog geen URL's geladen</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: visualization -->
+  <div class="right" id="right-panel">
+    <div class="empty-state" id="empty-state">
+      <i class="ti ti-topology-star-3"></i>
+      <p>Voer een XSD URL in en klik op <strong>Laden</strong></p>
+      <p style="margin-top:4px">Voorbeeld:<br>
+        <code>https://www.w3.org/2001/XMLSchema.xsd</code>
+      </p>
+    </div>
+
+    <div id="viz" style="display:none">
+      <div class="loaded-header">
+        <i class="ti ti-file-type-xml" style="font-size:16px;color:var(--seq-c);flex-shrink:0"></i>
+        <span class="loaded-url" id="loaded-url" title=""></span>
+        <button class="btn sm reload-btn" onclick="reloadCurrent()" title="Opnieuw laden">
+          <i class="ti ti-refresh"></i>
+        </button>
+      </div>
+      <div class="stats-row" id="stats-row"></div>
+      <div class="toolbar">
+        <button class="btn sm" onclick="expandAll()"><i class="ti ti-unfold-more-horizontal"></i> Uitklappen</button>
+        <button class="btn sm" onclick="collapseAll()"><i class="ti ti-fold"></i> Inklappen</button>
+        <div class="sep"></div>
+        <button class="btn sm" onclick="expandLevel(2)">2 niveaus</button>
+        <button class="btn sm" onclick="expandLevel(3)">3 niveaus</button>
+        <div class="sep"></div>
+        <div class="search-wrap">
+          <i class="ti ti-search"></i>
+          <input type="text" id="search-input" placeholder="Zoek element, type..." oninput="filterTree(this.value)">
+        </div>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div id="tree-out"></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+/* ===== TYPE CONFIG ===== */
+const T = {
+  schema:         {c:'--element-c', bg:'--element-bg', b:'--element-b', icon:'ti-schema'},
+  element:        {c:'--element-c', bg:'--element-bg', b:'--element-b', icon:'ti-brackets-angle'},
+  complexType:    {c:'--complex-c', bg:'--complex-bg', b:'--complex-b', icon:'ti-box'},
+  simpleType:     {c:'--simple-c',  bg:'--simple-bg',  b:'--simple-b',  icon:'ti-text-size'},
+  sequence:       {c:'--seq-c',     bg:'--seq-bg',     b:'--seq-b',     icon:'ti-list'},
+  choice:         {c:'--choice-c',  bg:'--choice-bg',  b:'--choice-b',  icon:'ti-git-branch'},
+  all:            {c:'--all-c',     bg:'--all-bg',     b:'--all-b',     icon:'ti-layout-grid'},
+  attribute:      {c:'--attr-c',    bg:'--attr-bg',    b:'--attr-b',    icon:'ti-at'},
+  attributeGroup: {c:'--group-c',   bg:'--group-bg',   b:'--group-b',   icon:'ti-tags'},
+  group:          {c:'--group-c',   bg:'--group-bg',   b:'--group-b',   icon:'ti-category'},
+  restriction:    {c:'--other-c',   bg:'--other-bg',   b:'--other-b',   icon:'ti-filter'},
+  extension:      {c:'--other-c',   bg:'--other-bg',   b:'--other-b',   icon:'ti-arrow-move-up'},
+  enumeration:    {c:'--enum-c',    bg:'--enum-bg',    b:'--enum-b',    icon:'ti-list-check'},
+  pattern:        {c:'--other-c',   bg:'--other-bg',   b:'--other-b',   icon:'ti-regex'},
+  import:         {c:'--other-c',   bg:'--other-bg',   b:'--other-b',   icon:'ti-package-import'},
+  include:        {c:'--other-c',   bg:'--other-bg',   b:'--other-b',   icon:'ti-package'},
+};
+const FB = {c:'--other-c',bg:'--other-bg',b:'--other-b',icon:'ti-code'};
+function cfg(n){return T[n]||{...FB}}
+
+const SKIP = new Set(['annotation','documentation','appinfo']);
+const TRACKED = new Set(['element','complexType','simpleType','sequence','choice','all','attribute','group','attributeGroup','enumeration','restriction','extension']);
+const HIST_KEY = 'xsd_url_history';
+const MAX_HIST = 20;
+
+let idCtr=0, statsMap={}, seenTypes=new Set(), currentUrl='';
+
+/* ===== HISTORY ===== */
+function getHistory(){
+  try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]')}catch{return[]}
+}
+function saveToHistory(url){
+  let h=getHistory().filter(x=>x.url!==url);
+  h.unshift({url,ts:Date.now()});
+  if(h.length>MAX_HIST) h=h.slice(0,MAX_HIST);
+  localStorage.setItem(HIST_KEY,JSON.stringify(h));
+  renderHistory();
+}
+function deleteFromHistory(url){
+  const h=getHistory().filter(x=>x.url!==url);
+  localStorage.setItem(HIST_KEY,JSON.stringify(h));
+  renderHistory();
+}
+function clearHistory(){
+  localStorage.removeItem(HIST_KEY);
+  renderHistory();
+}
+function timeAgo(ts){
+  const s=Math.floor((Date.now()-ts)/1000);
+  if(s<60) return 'zojuist';
+  if(s<3600) return Math.floor(s/60)+'m geleden';
+  if(s<86400) return Math.floor(s/3600)+'u geleden';
+  return Math.floor(s/86400)+'d geleden';
+}
+function renderHistory(){
+  const h=getHistory();
+  const el=document.getElementById('history-list');
+  if(!h.length){
+    el.innerHTML='<div class="history-empty">Nog geen URL\'s geladen</div>';
+    return;
+  }
+  el.innerHTML=h.map(({url,ts})=>`
+    <div class="hist-item" onclick="loadUrl('${esc(url)}')">
+      <i class="ti ti-clock" style="font-size:13px;color:var(--text3);flex-shrink:0"></i>
+      <span class="hist-url" title="${esc(url)}">${esc(url)}</span>
+      <span class="hist-time">${timeAgo(ts)}</span>
+      <button class="hist-del" onclick="event.stopPropagation();deleteFromHistory('${esc(url)}')" title="Verwijder">
+        <i class="ti ti-x"></i>
+      </button>
+    </div>`).join('');
+}
+
+/* ===== FETCH ===== */
+async function loadFromUrl(){
+  const url=document.getElementById('url-input').value.trim();
+  if(!url) return;
+  await loadUrl(url);
+}
+
+async function loadUrl(url){
+  document.getElementById('url-input').value=url;
+  currentUrl=url;
+  setStatus('loading','Laden…');
+  setLoadBtn(true);
+
+  try{
+    const res=await fetch(`/api/fetch-xsd?url=${encodeURIComponent(url)}`);
+    const ct=res.headers.get('content-type')||'';
+    if(!res.ok){
+      let msg=`HTTP ${res.status}`;
+      if(ct.includes('json')){const j=await res.json();msg=j.error||msg;}
+      throw new Error(msg);
+    }
+    const xsd=await res.text();
+    setStatus('ok',`Schema geladen`);
+    saveToHistory(url);
+    visualize(xsd, url);
+  }catch(e){
+    setStatus('error',e.message);
+  }finally{
+    setLoadBtn(false);
+  }
+}
+
+function reloadCurrent(){
+  if(currentUrl) loadUrl(currentUrl);
+}
+
+function setLoadBtn(loading){
+  const btn=document.getElementById('load-btn');
+  btn.disabled=loading;
+  btn.innerHTML=loading
+    ? '<i class="ti ti-loader-2 spin"></i> Laden…'
+    : '<i class="ti ti-download"></i> Laden';
+}
+
+function setStatus(type,msg){
+  const el=document.getElementById('url-status');
+  el.className='url-status '+type;
+  const icon=type==='loading'?'ti-loader-2 spin':type==='error'?'ti-alert-triangle':'ti-check';
+  el.innerHTML=`<i class="ti ${icon}"></i><span>${esc(msg)}</span>`;
+}
+
+/* ===== PARSE ===== */
+function getDoc(xn){
+  for(const c of xn.children){
+    if(c.localName==='annotation'){
+      for(const d of c.children){
+        if(d.localName==='documentation'){
+          const t=d.textContent.trim();
+          return t.length>90?t.slice(0,87)+'…':t;
+        }
+      }
+    }
+  }
+  return null;
+}
+function getOccurs(a){
+  const min=a.minOccurs,max=a.maxOccurs;
+  if(!min&&!max) return null;
+  const mn=min||'1',mx=max||'1';
+  if(mn==='1'&&mx==='1') return null;
+  return `${mn}..${mx}`;
+}
+function buildTree(xn){
+  const ln=xn.localName;
+  if(SKIP.has(ln)) return null;
+  const a={};
+  for(const at of xn.attributes) a[at.localName]=at.value;
+  const doc=getDoc(xn);
+  if(TRACKED.has(ln)){statsMap[ln]=(statsMap[ln]||0)+1;seenTypes.add(ln);}
+  const children=[];
+  for(const ch of xn.children){const n=buildTree(ch);if(n)children.push(n);}
+  return{ln,a,doc,children};
+}
+
+/* ===== RENDER ===== */
+function cv(v){return`var(${v})`}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function stripNs(t){const p=t.split(':');return p[p.length-1]}
+
+function renderNode(node,depth=0){
+  const {ln,a,doc,children}=node;
+  const id='n'+(idCtr++);
+  const tc=cfg(ln);
+  const hasKids=children.length>0;
+  const name=a.name||a.ref||'';
+  const typAttr=a.type||a.base||'';
+  const occurs=getOccurs(a);
+  const use=a.use||'';
+  const value=a.value||'';
+  const defVal=a.default||'';
+
+  const nameHtml=name
+    ?`<span class="node-name">${esc(name)}</span>`
+    :value?`<span class="node-name" style="font-family:monospace;color:${cv(tc.c)}">"${esc(value)}"</span>`
+    :`<span class="node-name anon">anoniem</span>`;
+
+  const typBadge=typAttr?`<span class="type-badge" style="background:${cv(tc.bg)};color:${cv(tc.c)};border:0.5px solid ${cv(tc.b)}">${esc(stripNs(typAttr))}</span>`:'';
+
+  let ocBadge='';
+  if(occurs){
+    const cls=occurs.includes('0..')?'optional':occurs.includes('unbounded')||/\.\.[2-9]/.test(occurs)?'multi':'';
+    ocBadge=`<span class="occurs-badge ${cls}">${esc(occurs)}</span>`;
+  }
+  const useBadge=use?`<span class="use-badge">${esc(use)}</span>`:'';
+  const defBadge=defVal?`<span class="occurs-badge" title="default">=&thinsp;${esc(defVal)}</span>`:'';
+  const docHtml=doc?`<span class="doc-text" title="${esc(doc)}">— ${esc(doc)}</span>`:'';
+
+  const chevron=hasKids
+    ?`<span class="chevron open" id="cv-${id}">&#9654;</span>`
+    :`<span class="chevron leaf">&#9654;</span>`;
+
+  const kw=`<span class="kw-badge" style="background:${cv(tc.bg)};color:${cv(tc.c)};border:0.5px solid ${cv(tc.b)}">${esc(ln)}</span>`;
+  const icon=`<span class="type-icon" style="background:${cv(tc.bg)}"><i class="ti ${tc.icon}" style="color:${cv(tc.c)}"></i></span>`;
+
+  const clickable=hasKids?`onclick="toggle('${id}')" `:'';
+  const wrapCls=ln==='choice'?'tree-node choice-wrapper':'tree-node';
+  const searchAttr=`data-search="${esc((name+' '+typAttr+' '+ln).toLowerCase())}"`;
+
+  const childrenHtml=hasKids
+    ?`<div class="node-children" id="ch-${id}">${children.map(c=>renderNode(c,depth+1)).join('')}</div>`
+    :'';
+
+  return`<div class="${wrapCls}" id="${id}" ${searchAttr}>
+    <div class="node-row" ${clickable}>${chevron}${icon}${kw}${nameHtml}${typBadge}${ocBadge}${useBadge}${defBadge}${docHtml}</div>
+    ${childrenHtml}
+  </div>`;
+}
+
+/* ===== VISUALIZE ===== */
+function visualize(xsdText, url){
+  idCtr=0;statsMap={};seenTypes=new Set();
+  try{
+    const parser=new DOMParser();
+    const doc=parser.parseFromString(xsdText,'application/xml');
+    const errEl=doc.querySelector('parsererror');
+    if(errEl) throw new Error('XML parse fout: '+(errEl.querySelector('div')?.textContent||errEl.textContent));
+
+    const tree=buildTree(doc.documentElement);
+
+    document.getElementById('empty-state').style.display='none';
+    document.getElementById('viz').style.display='block';
+
+    // loaded header
+    const lu=document.getElementById('loaded-url');
+    lu.textContent=url;lu.title=url;
+
+    // stats
+    const ORDER=['element','complexType','simpleType','sequence','choice','all','attribute','group','attributeGroup','enumeration'];
+    document.getElementById('stats-row').innerHTML=ORDER
+      .filter(k=>statsMap[k])
+      .map(k=>{
+        const tc=cfg(k);
+        return`<div class="stat-pill" style="background:${cv(tc.bg)};border-color:${cv(tc.b)};color:${cv(tc.c)}">
+          <div><div class="num">${statsMap[k]}</div><div class="lbl">${k}</div></div>
+        </div>`;
+      }).join('');
+
+    // legend
+    document.getElementById('legend').innerHTML=
+      [...seenTypes].map(k=>{
+        const tc=cfg(k);
+        return`<div class="leg-item" onclick="filterTree('${k}')">
+          <div class="leg-dot" style="background:${cv(tc.c)}"></div><span>${k}</span>
+        </div>`;
+      }).join('')+
+      `<div class="leg-item" onclick="filterTree('');document.getElementById('search-input').value=''" style="opacity:0.55">
+        <i class="ti ti-x" style="font-size:11px"></i> wis filter
+      </div>`;
+
+    // tree
+    document.getElementById('tree-out').innerHTML=renderNode(tree,0);
+    expandLevel(2);
+    document.getElementById('search-input').value='';
+
+  }catch(e){
+    document.getElementById('empty-state').style.display='none';
+    document.getElementById('viz').style.display='block';
+    document.getElementById('tree-out').innerHTML=
+      `<div class="error-box"><i class="ti ti-alert-triangle"></i><span><strong>Parse fout:</strong> ${esc(e.message)}</span></div>`;
+    document.getElementById('stats-row').innerHTML='';
+    document.getElementById('legend').innerHTML='';
+    document.getElementById('loaded-url').textContent=url;
+  }
+}
+
+/* ===== TREE CONTROLS ===== */
+function toggle(id){
+  const ch=document.getElementById('ch-'+id);
+  const cv2=document.getElementById('cv-'+id);
+  if(!ch) return;
+  const c=ch.classList.toggle('collapsed');
+  cv2&&cv2.classList.toggle('open',!c);
+}
+function expandAll(){
+  document.querySelectorAll('.node-children').forEach(e=>e.classList.remove('collapsed'));
+  document.querySelectorAll('.chevron:not(.leaf)').forEach(e=>e.classList.add('open'));
+}
+function collapseAll(){
+  document.querySelectorAll('.node-children').forEach(e=>e.classList.add('collapsed'));
+  document.querySelectorAll('.chevron:not(.leaf)').forEach(e=>e.classList.remove('open'));
+}
+function expandLevel(max){
+  collapseAll();
+  function walk(el,d){
+    if(d>=max) return;
+    const ch=el.querySelector(':scope>.node-children');
+    const cv2=el.querySelector(':scope>.node-row>.chevron');
+    if(ch){ch.classList.remove('collapsed');cv2&&cv2.classList.add('open');
+      for(const c of ch.children) walk(c,d+1);}
+  }
+  const root=document.getElementById('tree-out').firstElementChild;
+  if(root) walk(root,0);
+}
+function filterTree(q){
+  const term=q.trim().toLowerCase();
+  if(!term){
+    document.querySelectorAll('.tree-node').forEach(el=>el.classList.remove('node-hidden'));
+    document.querySelectorAll('.node-row').forEach(el=>el.classList.remove('highlighted'));
+    return;
+  }
+  const all=[...document.querySelectorAll('.tree-node')];
+  const matching=new Set();const ancestors=new Set();
+  all.forEach(el=>{
+    if((el.getAttribute('data-search')||'').includes(term)){
+      matching.add(el);
+      let p=el.parentElement?.closest('.tree-node');
+      while(p){ancestors.add(p);p=p.parentElement?.closest('.tree-node');}
+    }
+  });
+  all.forEach(el=>{
+    const vis=matching.has(el)||ancestors.has(el);
+    el.classList.toggle('node-hidden',!vis);
+    el.querySelector(':scope>.node-row')?.classList.toggle('highlighted',matching.has(el));
+    if(ancestors.has(el)){
+      const ch=document.getElementById('ch-'+el.id);
+      const cv2=document.getElementById('cv-'+el.id);
+      if(ch){ch.classList.remove('collapsed');cv2&&cv2.classList.add('open');}
+    }
+  });
+}
+
+/* ===== INIT ===== */
+renderHistory();
+</script>
+</body>
+</html>
