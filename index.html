@@ -147,6 +147,81 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
 .choice-wrapper>.node-children{border-left-color:var(--ch-b);border-left-style:dashed}
 .node-hidden{display:none}
 
+/* ====== HIERARCHY VIEW ====== */
+.hier-root{font-size:13px}
+
+/* root element block */
+.hier-root-el{margin-bottom:20px;background:var(--surface);
+  border:0.5px solid var(--border2);border-radius:var(--radius-lg);overflow:hidden}
+.hier-root-header{display:flex;align-items:center;gap:10px;padding:11px 16px;
+  background:var(--el-bg);border-bottom:0.5px solid var(--el-b);cursor:pointer;
+  user-select:none}
+.hier-root-header:hover{opacity:.9}
+.hier-root-name{font-size:15px;font-weight:500;color:var(--el-c)}
+.hier-root-type{font-size:11px;padding:2px 8px;border-radius:8px;
+  background:var(--surface);border:0.5px solid var(--el-b);color:var(--el-c);
+  font-family:'Menlo',monospace}
+.hier-root-body{padding:8px 0}
+.hier-root-body.collapsed{display:none}
+
+/* group connector row (sequence / choice / all) */
+.hier-group-row{display:flex;align-items:center;gap:6px;
+  padding:4px 14px;margin:2px 0}
+
+/* element row */
+.hier-el-row{display:flex;align-items:center;gap:8px;
+  padding:4px 12px;border-radius:5px;transition:background .1s;cursor:pointer;
+  user-select:none;min-height:28px}
+.hier-el-row:hover{background:var(--surface2)}
+.hier-el-row.has-children{}
+
+/* children container with left border */
+.hier-children{
+  border-left:2px solid var(--border2);margin-left:28px;
+  padding-left:0}
+.hier-children.is-choice{border-left-color:var(--ch-b);border-left-style:dashed}
+.hier-children.collapsed{display:none}
+
+.hier-el-chevron{width:13px;height:13px;display:flex;align-items:center;
+  justify-content:center;color:var(--text3);font-size:10px;transition:transform .15s;flex-shrink:0}
+.hier-el-chevron.open{transform:rotate(90deg)}
+.hier-el-chevron.leaf{opacity:0}
+
+.hier-el-name{font-weight:500;font-size:13px;flex-shrink:0}
+.hier-el-name.is-attr{color:var(--at-c);font-weight:400}
+
+.hier-type-badge{font-size:10px;padding:1px 7px;border-radius:8px;
+  font-family:'Menlo',monospace;white-space:nowrap;flex-shrink:0}
+.hier-type-badge.known{background:var(--cx-bg);color:var(--cx-c);
+  border:0.5px solid var(--cx-b);cursor:pointer}
+.hier-type-badge.known:hover{opacity:.75}
+.hier-type-badge.builtin{background:var(--surface2);color:var(--text3);
+  border:0.5px solid var(--border)}
+.hier-type-badge.simple{background:var(--si-bg);color:var(--si-c);
+  border:0.5px solid var(--si-b)}
+
+.hier-occurs{font-size:10px;padding:1px 6px;border-radius:7px;
+  background:var(--surface2);border:0.5px solid var(--border);
+  color:var(--text2);font-family:monospace}
+.hier-occurs.opt{color:var(--sq-c)}.hier-occurs.multi{color:var(--ch-c)}
+
+.hier-use{font-size:10px;padding:1px 6px;border-radius:7px;
+  background:var(--el-bg);border:0.5px solid var(--el-b);color:var(--el-c)}
+
+.hier-doc{font-size:11px;color:var(--text3);font-style:italic;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+
+/* choice block with OR dividers */
+.hier-choice-block{
+  border:1px dashed var(--ch-b);border-radius:var(--radius);
+  margin:4px 0;overflow:hidden;background:color-mix(in srgb,var(--ch-bg) 25%,transparent)}
+.hier-choice-header{display:flex;align-items:center;gap:6px;
+  padding:4px 10px;border-bottom:0.5px dashed var(--ch-b)}
+.hier-or-divider{text-align:center;font-size:10px;font-weight:500;
+  color:var(--ch-c);padding:2px 10px;opacity:.7;letter-spacing:.5px}
+
+.hier-cycle-ref{font-size:11px;color:var(--text3);font-style:italic;padding:3px 12px}
+
 /* ====== SEGMENT VIEW ====== */
 .seg-view{display:flex;flex-direction:column;gap:0}
 
@@ -281,6 +356,9 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
         <button class="btn sm view-btn active" id="btn-tree" onclick="setView('tree')">
           <i class="ti ti-list-tree"></i> Boom
         </button>
+        <button class="btn sm view-btn" id="btn-hier" onclick="setView('hier')">
+          <i class="ti ti-sitemap"></i> Hiërarchie
+        </button>
         <button class="btn sm view-btn" id="btn-seg" onclick="setView('seg')">
           <i class="ti ti-layout-cards"></i> Segmenten
         </button>
@@ -299,6 +377,7 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
         </div>
       </div>
       <div id="tree-view"><div id="tree-out"></div></div>
+      <div id="hier-view" style="display:none"><div id="hier-out"></div></div>
       <div id="seg-view" style="display:none"><div id="seg-out"></div></div>
     </div>
   </div>
@@ -693,17 +772,245 @@ function scrollToCard(name){
   },50);
 }
 
+/* ===== HIERARCHY VIEW ===== */
+const XS_BUILTINS=new Set(['string','integer','decimal','boolean','date','dateTime',
+  'time','duration','anyURI','base64Binary','hexBinary','float','double','long','int',
+  'short','byte','positiveInteger','nonNegativeInteger','negativeInteger',
+  'nonPositiveInteger','unsignedLong','unsignedInt','unsignedShort','unsignedByte',
+  'normalizedString','token','language','NMTOKEN','Name','NCName','ID','IDREF',
+  'IDREFS','ENTITY','ENTITIES','NOTATION','QName','gYear','gMonth','gDay',
+  'gYearMonth','gMonthDay','yearMonthDuration','dayTimeDuration','untypedAtomic']);
+
+let hierIdCtr=0;
+
+function renderHierView(rootNode,tm){
+  const rootEls=rootNode.children.filter(c=>c.ln==='element');
+  if(!rootEls.length) return'<p style="color:var(--text3);font-size:13px">Geen root elementen gevonden in het schema.</p>';
+  return`<div class="hier-root">${rootEls.map(el=>hierRootEl(el,tm)).join('')}</div>`;
+}
+
+function hierRootEl(elNode,tm){
+  const id='h'+(hierIdCtr++);
+  const name=elNode.a.name||elNode.a.ref||'(onbekend)';
+  const typeName=stripNs(elNode.a.type||'');
+  const typeNode=typeName&&tm[typeName]?tm[typeName]:
+    elNode.children.find(c=>c.ln==='complexType')||null;
+
+  const typeBadge=typeName
+    ?`<span class="hier-type-badge ${tm[typeName]?'known':'builtin'}"
+        ${tm[typeName]?`onclick="scrollToCard('${esc(typeName)}')" title="Ga naar type definitie"`:''}>
+        ${esc(typeName)}</span>`:'';
+
+  let bodyHtml='';
+  if(typeNode&&typeNode.ln==='complexType'){
+    bodyHtml=hierComplexTypeBody(typeNode,tm,new Set([typeName]),id);
+  }
+
+  return`<div class="hier-root-el">
+    <div class="hier-root-header" onclick="toggleHier('body-${id}','chv-${id}')">
+      <span class="hier-el-chevron open" id="chv-${id}">&#9654;</span>
+      <i class="ti ti-brackets-angle" style="color:var(--el-c);font-size:16px"></i>
+      <span class="hier-root-name">${esc(name)}</span>
+      ${typeBadge}
+      ${elNode.doc?`<span class="hier-doc">— ${esc(elNode.doc)}</span>`:''}
+    </div>
+    <div class="hier-root-body" id="body-${id}">${bodyHtml||'<div style="padding:8px 14px;font-size:12px;color:var(--text3)">Geen inhoud gevonden</div>'}</div>
+  </div>`;
+}
+
+function hierComplexTypeBody(ctNode,tm,visited,parentId){
+  // Handle complexContent extension/restriction
+  const cc=ctNode.children.find(c=>c.ln==='complexContent'||c.ln==='simpleContent');
+  const directGroup=ctNode.children.find(c=>['sequence','choice','all'].includes(c.ln));
+  const directAttrs=ctNode.children.filter(c=>c.ln==='attribute');
+  let html='';
+
+  if(cc){
+    const inner=cc.children.find(c=>c.ln==='extension'||c.ln==='restriction');
+    if(inner){
+      const base=stripNs(inner.a.base||'');
+      // Include base type elements first
+      if(base&&tm[base]&&!visited.has(base)){
+        const v2=new Set(visited);v2.add(base);
+        html+=hierComplexTypeBody(tm[base],tm,v2,parentId);
+      }
+      const innerGroup=inner.children.find(c=>['sequence','choice','all'].includes(c.ln));
+      if(innerGroup) html+=hierGroup(innerGroup,tm,visited,0);
+      const innerAttrs=inner.children.filter(c=>c.ln==='attribute');
+      if(innerAttrs.length) html+=hierAttrBlock(innerAttrs);
+    }
+  } else {
+    if(directGroup) html+=hierGroup(directGroup,tm,visited,0);
+    if(directAttrs.length) html+=hierAttrBlock(directAttrs);
+  }
+  return html;
+}
+
+function hierGroup(groupNode,tm,visited,depth){
+  const ln=groupNode.ln;
+  const isChoice=ln==='choice';
+  const isAll=ln==='all';
+  const oc=getOccurs(groupNode.a);
+  const tc=tcfg(ln);
+  const ocBadge=oc?`<span class="hier-occurs ${oc.includes('0..')?'opt':oc.includes('unbounded')?'multi':''}">${esc(oc)}</span>`:'';
+
+  // Children that are elements or sub-groups
+  const items=groupNode.children.filter(c=>
+    c.ln==='element'||['sequence','choice','all'].includes(c.ln)||c.ln==='group');
+
+  if(!items.length) return'';
+
+  if(isChoice){
+    // Render as a choice block with OR separators
+    const id='h'+(hierIdCtr++);
+    let optionsHtml='';
+    items.forEach((item,i)=>{
+      if(i>0) optionsHtml+=`<div class="hier-or-divider">── of ──</div>`;
+      if(item.ln==='element') optionsHtml+=hierEl(item,tm,visited,depth+1,true);
+      else if(['sequence','choice','all'].includes(item.ln)) optionsHtml+=hierGroup(item,tm,visited,depth+1);
+    });
+    return`<div style="padding:4px 14px">
+      <div class="hier-choice-block">
+        <div class="hier-choice-header">
+          <span class="kw-badge" style="background:var(--ch-bg);color:var(--ch-c);border:0.5px solid var(--ch-b)">choice</span>
+          ${ocBadge}
+        </div>
+        ${optionsHtml}
+      </div>
+    </div>`;
+  }
+
+  // sequence / all — show group label + children
+  let childrenHtml=items.map(item=>{
+    if(item.ln==='element') return hierEl(item,tm,visited,depth+1,false);
+    if(['sequence','choice','all'].includes(item.ln)) return hierGroup(item,tm,visited,depth+1);
+    if(item.ln==='group') return hierGroupRef(item,tm,visited,depth+1);
+    return'';
+  }).join('');
+
+  const groupLabel=`<div class="hier-group-row">
+    <span class="kw-badge" style="background:${cv(tc.bg)};color:${cv(tc.c)};border:0.5px solid ${cv(tc.b)}">${ln}</span>
+    ${ocBadge}
+  </div>`;
+
+  return groupLabel+childrenHtml;
+}
+
+function hierGroupRef(groupNode,tm,visited,depth){
+  const ref=stripNs(groupNode.a.ref||'');
+  if(ref&&tm[ref]&&!visited.has(ref)){
+    const v2=new Set(visited);v2.add(ref);
+    const inner=tm[ref].children.find(c=>['sequence','choice','all'].includes(c.ln));
+    if(inner) return hierGroup(inner,tm,v2,depth);
+  }
+  return`<div class="hier-el-row"><span style="font-size:11px;color:var(--text3)">group ref: ${esc(ref)}</span></div>`;
+}
+
+function hierEl(elNode,tm,visited,depth,insideChoice){
+  const id='h'+(hierIdCtr++);
+  const name=elNode.a.name||elNode.a.ref||'';
+  const typeName=stripNs(elNode.a.type||'');
+  const oc=getOccurs(elNode.a);
+
+  // Resolve type
+  const inlineCx=elNode.children.find(c=>c.ln==='complexType');
+  const inlineSi=elNode.children.find(c=>c.ln==='simpleType');
+  let typeNode=null;
+  let isCycle=false;
+  let isBuiltin=XS_BUILTINS.has(typeName);
+  let isSimple=false;
+
+  if(inlineCx){typeNode=inlineCx;}
+  else if(inlineSi){isSimple=true;}
+  else if(typeName&&!isBuiltin){
+    if(visited.has(typeName)){isCycle=true;}
+    else if(tm[typeName]){
+      typeNode=tm[typeName];
+      if(typeNode.ln==='simpleType') isSimple=true;
+    }
+  }
+
+  const hasChildren=typeNode&&typeNode.ln==='complexType'&&!isCycle;
+
+  // Type badge
+  let typeBadge='';
+  if(typeName){
+    const cls=isBuiltin?'builtin':isSimple?'simple':tm[typeName]?'known':'builtin';
+    const click=(!isBuiltin&&!isSimple&&tm[typeName])?`onclick="scrollToCard('${esc(typeName)}')" title="Ga naar type definitie"`:'';
+    typeBadge=`<span class="hier-type-badge ${cls}" ${click}>${esc(typeName)}</span>`;
+  }
+
+  // Occurs badge
+  const ocBadge=oc?`<span class="hier-occurs ${oc.includes('0..')?'opt':oc.includes('unbounded')?'multi':''}">${esc(oc)}</span>`:'';
+
+  const chevron=hasChildren
+    ?`<span class="hier-el-chevron open" id="cv-${id}">&#9654;</span>`
+    :`<span class="hier-el-chevron leaf">&#9654;</span>`;
+
+  const doc=elNode.doc?`<span class="hier-doc" title="${esc(elNode.doc)}">— ${esc(elNode.doc)}</span>`:'';
+
+  // Children body
+  let childBody='';
+  if(hasChildren){
+    const v2=new Set(visited);if(typeName)v2.add(typeName);
+    const bodyHtml=hierComplexTypeBody(typeNode,tm,v2,id);
+    childBody=`<div class="hier-children${insideChoice?' is-choice':''} " id="ch-${id}">${bodyHtml}</div>`;
+  }
+  if(isCycle){
+    childBody=`<div class="hier-cycle-ref">↻ Circulaire verwijzing naar ${esc(typeName)}</div>`;
+  }
+
+  const clickHandler=hasChildren?`onclick="toggleHier('ch-${id}','cv-${id}')"`:''
+
+  return`<div>
+    <div class="hier-el-row" ${clickHandler}>
+      ${chevron}
+      <i class="ti ti-brackets-angle" style="font-size:13px;color:var(--el-c);flex-shrink:0"></i>
+      <span class="hier-el-name">${esc(name)}</span>
+      ${typeBadge}${ocBadge}${doc}
+    </div>
+    ${childBody}
+  </div>`;
+}
+
+function hierAttrBlock(attrs){
+  if(!attrs.length)return'';
+  const rows=attrs.map(a=>{
+    const name=a.a.name||a.a.ref||'';
+    const typeName=stripNs(a.a.type||'');
+    const use=a.a.use||'';
+    const typeBadge=typeName?`<span class="hier-type-badge builtin">${esc(typeName)}</span>`:'';
+    const useBadge=use?`<span class="hier-use">${esc(use)}</span>`:'';
+    return`<div class="hier-el-row" style="opacity:.8">
+      <span class="hier-el-chevron leaf">&#9654;</span>
+      <i class="ti ti-at" style="font-size:12px;color:var(--at-c);flex-shrink:0"></i>
+      <span class="hier-el-name is-attr">${esc(name)}</span>
+      ${typeBadge}${useBadge}
+    </div>`;
+  }).join('');
+  return`<div style="border-top:0.5px solid var(--border);margin-top:2px;padding-top:2px">${rows}</div>`;
+}
+
+function toggleHier(bodyId,chevId){
+  const body=document.getElementById(bodyId);
+  const chev=document.getElementById(chevId);
+  if(!body)return;
+  const c=body.classList.toggle('collapsed');
+  if(chev)chev.classList.toggle('open',!c);
+}
+
 /* ===== VIEW TOGGLE ===== */
 function setView(v){
   currentView=v;
-  document.getElementById('tree-view').style.display=v==='tree'?'block':'none';
-  document.getElementById('seg-view').style.display=v==='seg'?'block':'none';
-  document.getElementById('tree-controls').style.display=v==='tree'?'flex':'none';
-  document.getElementById('btn-tree').classList.toggle('active',v==='tree');
-  document.getElementById('btn-seg').classList.toggle('active',v==='seg');
-  if(v==='seg'&&document.getElementById('search-input').value){
-    filterSeg(document.getElementById('search-input').value);
-  }
+  document.getElementById("tree-view").style.display=v==="tree"?"block":"none";
+  document.getElementById("hier-view").style.display=v==="hier"?"block":"none";
+  document.getElementById("seg-view").style.display=v==="seg"?"block":"none";
+  document.getElementById("tree-controls").style.display=v==="tree"?"flex":"none";
+  document.getElementById("btn-tree").classList.toggle("active",v==="tree");
+  document.getElementById("btn-hier").classList.toggle("active",v==="hier");
+  document.getElementById("btn-seg").classList.toggle("active",v==="seg");
+  const q=document.getElementById("search-input").value;
+  if(q) onSearch(q);
 }
 
 /* ===== SEARCH ===== */
@@ -803,20 +1110,26 @@ function visualize(xsdText,url){
     }).join('');
 
     // Tree render
-    document.getElementById('tree-out').innerHTML=renderTreeNode(rootParsed,0);
+    document.getElementById("tree-out").innerHTML=renderTreeNode(rootParsed,0);
     expandLevel(2);
 
-    // Segment render
-    document.getElementById('seg-out').innerHTML=renderSegView(rootParsed,typeMap);
+    // Hierarchy render
+    hierIdCtr=0;
+    document.getElementById("hier-out").innerHTML=renderHierView(rootParsed,typeMap);
 
-    document.getElementById('search-input').value='';
+    // Segment render
+    document.getElementById("seg-out").innerHTML=renderSegView(rootParsed,typeMap);
+
+    document.getElementById("search-input").value="";
+
 
   }catch(e){
     document.getElementById('empty-state').style.display='none';
     document.getElementById('viz').style.display='block';
     document.getElementById('tree-out').innerHTML=
       `<div class="error-box"><i class="ti ti-alert-triangle"></i><span><strong>Parse fout:</strong> ${esc(e.message)}</span></div>`;
-    document.getElementById('seg-out').innerHTML='';
+    document.getElementById("hier-out").innerHTML="";
+    document.getElementById("seg-out").innerHTML="";
     document.getElementById('stats-row').innerHTML='';
   }
 }
@@ -902,7 +1215,8 @@ function showHtmlHint(url){
   document.getElementById('loaded-url').textContent=url;
   document.getElementById('stats-row').innerHTML='';
   document.getElementById('tree-out').innerHTML='';
-  document.getElementById('seg-out').innerHTML='';
+  document.getElementById("hier-out").innerHTML="";
+    document.getElementById("seg-out").innerHTML="";
   const u=esc(url);
   document.getElementById('tree-out').innerHTML=`<div class="error-box" style="flex-direction:column;gap:10px">
     <div style="display:flex;gap:10px;align-items:flex-start">
