@@ -445,11 +445,15 @@ async function loadUrl(url){
     const ct=res.headers.get('content-type')||'';
     if(!res.ok){
       let msg=`HTTP ${res.status}`;
-      if(ct.includes('json')){const j=await res.json();msg=j.error||msg;}
+      let hint=null;
+      if(ct.includes('json')){
+        try{const j=await res.json();msg=j.error||msg;hint=j.hint||null;}catch{}
+      }
+      if(hint==='html') showHtmlHint(url);
       throw new Error(msg);
     }
     const xsd=await res.text();
-    setStatus('ok',`Schema geladen`);
+    setStatus('ok','Schema geladen');
     saveToHistory(url);
     visualize(xsd, url);
   }catch(e){
@@ -476,6 +480,16 @@ function setStatus(type,msg){
   el.className='url-status '+type;
   const icon=type==='loading'?'ti-loader-2 spin':type==='error'?'ti-alert-triangle':'ti-check';
   el.innerHTML=`<i class="ti ${icon}"></i><span>${esc(msg)}</span>`;
+}
+
+function showHtmlHint(url){
+  document.getElementById("empty-state").style.display="none";
+  document.getElementById("viz").style.display="block";
+  document.getElementById("loaded-url").textContent=url;
+  document.getElementById("stats-row").innerHTML="";
+  document.getElementById("legend").innerHTML="";
+  const u=url.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  document.getElementById("tree-out").innerHTML=`<div class="error-box" style="flex-direction:column;gap:12px"><div style="display:flex;gap:10px;align-items:flex-start"><i class="ti ti-lock" style="font-size:20px;flex-shrink:0;margin-top:1px"></i><div><strong>De URL geeft een HTML pagina terug u2014 geen XSD</strong><br><span style="font-size:12px;opacity:0.85">Dit betekent meestal dat de bron authenticatie vereist, alleen intern bereikbaar is, of naar een andere pagina doorverwijst.</span></div></div><div style="font-size:12px;opacity:0.85">Open de URL direct in de browser om te controleren: <a href="${u}" target="_blank" rel="noopener" style="color:var(--all-c);word-break:break-all">${u}</a></div></div>`;
 }
 
 /* ===== PARSE ===== */
