@@ -50,7 +50,19 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
 /* LEFT */
 .left{display:flex;flex-direction:column;background:var(--surface);
   border-right:0.5px solid var(--border2);overflow:hidden}
-.url-section{padding:16px 16px 12px;border-bottom:0.5px solid var(--border)}
+
+/* source tabs */
+.src-tabs{display:flex;border-bottom:0.5px solid var(--border2);background:var(--surface2)}
+.src-tab{flex:1;padding:10px 8px;font-size:12px;font-weight:500;cursor:pointer;
+  text-align:center;color:var(--text2);border-bottom:2px solid transparent;
+  transition:color .12s,border-color .12s;user-select:none;display:flex;
+  align-items:center;justify-content:center;gap:5px}
+.src-tab:hover{color:var(--text)}
+.src-tab.active{color:var(--el-c);border-bottom-color:var(--el-c);background:var(--surface)}
+.src-tab i{font-size:14px}
+
+.src-panel{padding:14px 16px 12px;border-bottom:0.5px solid var(--border)}
+
 .url-label{font-size:11px;font-weight:500;color:var(--text3);
   text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;display:block}
 .url-row{display:flex;gap:8px;align-items:center}
@@ -59,6 +71,19 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
   font-family:inherit;transition:border-color .15s}
 #url-input:focus{border-color:var(--el-c)}
 #url-input::placeholder{color:var(--text3)}
+
+/* jsonbin panel */
+.jb-field{margin-bottom:10px}
+.jb-label{font-size:11px;font-weight:500;color:var(--text3);
+  text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;display:block}
+.jb-input{width:100%;padding:8px 11px;border:0.5px solid var(--border2);
+  border-radius:var(--radius);background:var(--surface2);color:var(--text);
+  font-size:13px;outline:none;font-family:'Menlo',monospace;transition:border-color .15s}
+.jb-input:focus{border-color:var(--el-c)}
+.jb-input::placeholder{color:var(--text3)}
+.jb-hint{font-size:11px;color:var(--text3);margin-top:4px}
+.jb-actions{display:flex;gap:8px}
+
 .btn{display:inline-flex;align-items:center;gap:5px;padding:8px 13px;
   border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;
   border:0.5px solid var(--border2);background:transparent;color:var(--text);
@@ -316,7 +341,18 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
 
   <!-- LEFT -->
   <div class="left">
-    <div class="url-section">
+    <!-- Source tabs -->
+    <div class="src-tabs">
+      <div class="src-tab active" id="tab-url" onclick="switchSrcTab('url')">
+        <i class="ti ti-link"></i> URL
+      </div>
+      <div class="src-tab" id="tab-jb" onclick="switchSrcTab('jb')">
+        <i class="ti ti-database"></i> JSONBin
+      </div>
+    </div>
+
+    <!-- URL panel -->
+    <div class="src-panel" id="panel-url">
       <span class="url-label">XSD locatie (URL)</span>
       <div class="url-row">
         <input type="url" id="url-input" placeholder="https://example.com/schema.xsd"
@@ -327,14 +363,40 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
       </div>
       <div class="url-status" id="url-status"></div>
     </div>
+
+    <!-- JSONBin panel -->
+    <div class="src-panel" id="panel-jb" style="display:none">
+      <div class="jb-field">
+        <span class="jb-label">Bin ID</span>
+        <input type="text" class="jb-input" id="jb-binid"
+          placeholder="6849a1f28a456b796682…"
+          autocomplete="off" spellcheck="false"
+          onkeydown="if(event.key==='Enter')loadFromJsonBin()">
+        <div class="jb-hint">24-karakter hex ID uit de JSONBin URL</div>
+      </div>
+      <div class="jb-field">
+        <span class="jb-label">Master Key <span style="font-weight:400;opacity:.7">(alleen voor privé bins)</span></span>
+        <input type="password" class="jb-input" id="jb-key"
+          placeholder="$2a$10$…"
+          autocomplete="off">
+        <div class="jb-hint">Laat leeg voor publieke bins</div>
+      </div>
+      <div class="jb-actions">
+        <button class="btn primary" id="jb-load-btn" onclick="loadFromJsonBin()" style="flex:1">
+          <i class="ti ti-database-import"></i> Laden uit JSONBin
+        </button>
+      </div>
+      <div class="url-status" id="jb-status"></div>
+    </div>
+
     <div class="history-section">
       <div class="history-title">
-        <span>Recente URL's</span>
+        <span id="hist-label">Recente URL's</span>
         <button class="btn sm" onclick="clearHistory()" style="opacity:.6" title="Wissen">
           <i class="ti ti-trash"></i>
         </button>
       </div>
-      <div id="history-list"><div class="history-empty">Nog geen URL's geladen</div></div>
+      <div id="history-list"><div class="history-empty">Nog geen schema's geladen</div></div>
     </div>
   </div>
 
@@ -1137,36 +1199,65 @@ function visualize(xsdText,url){
 /* ===== HISTORY ===== */
 const HIST_KEY='xsd_url_history';
 function getHistory(){try{return JSON.parse(localStorage.getItem(HIST_KEY)||'[]')}catch{return[]}}
-function saveToHistory(url){
-  let h=getHistory().filter(x=>x.url!==url);
-  h.unshift({url,ts:Date.now()});
+
+function saveToHistory(entry){
+  // entry: {type:'url'|'jb', label, url?, binId?, hasKey?, ts?}
+  const key=entry.type==='jb'?entry.binId:entry.url;
+  let h=getHistory().filter(x=>{
+    const xkey=x.type==='jb'?x.binId:x.url;
+    return xkey!==key;
+  });
+  h.unshift({...entry,ts:Date.now()});
   if(h.length>20)h=h.slice(0,20);
   localStorage.setItem(HIST_KEY,JSON.stringify(h));
   renderHistory();
 }
-function deleteFromHistory(url){
-  localStorage.setItem(HIST_KEY,JSON.stringify(getHistory().filter(x=>x.url!==url)));
+
+function deleteFromHistory(key){
+  const h=getHistory().filter(x=>{
+    const xkey=x.type==='jb'?x.binId:(x.url||x.label);
+    return xkey!==key;
+  });
+  localStorage.setItem(HIST_KEY,JSON.stringify(h));
   renderHistory();
 }
+
 function clearHistory(){localStorage.removeItem(HIST_KEY);renderHistory();}
+
 function timeAgo(ts){
   const s=Math.floor((Date.now()-ts)/1000);
   if(s<60)return'zojuist';if(s<3600)return Math.floor(s/60)+'m geleden';
   if(s<86400)return Math.floor(s/3600)+'u geleden';return Math.floor(s/86400)+'d geleden';
 }
+
 function renderHistory(){
-  const h=getHistory();
+  const activeTab=document.getElementById('tab-jb').classList.contains('active')?'jb':'url';
+  const all=getHistory();
+  const h=all.filter(x=>(x.type||'url')===activeTab);
   const el=document.getElementById('history-list');
-  if(!h.length){el.innerHTML='<div class="history-empty">Nog geen URL\'s geladen</div>';return;}
-  el.innerHTML=h.map(({url,ts})=>`
-    <div class="hist-item" onclick="loadUrl('${esc(url)}')">
-      <i class="ti ti-clock" style="font-size:13px;color:var(--text3);flex-shrink:0"></i>
-      <span class="hist-url" title="${esc(url)}">${esc(url)}</span>
-      <span class="hist-time">${timeAgo(ts)}</span>
-      <button class="hist-del" onclick="event.stopPropagation();deleteFromHistory('${esc(url)}')" title="Verwijder">
+  if(!h.length){
+    el.innerHTML=`<div class="history-empty">Nog geen ${activeTab==='jb'?'bins':'URL\'s'} geladen</div>`;
+    return;
+  }
+  el.innerHTML=h.map(entry=>{
+    const isJb=entry.type==='jb';
+    const key=isJb?entry.binId:(entry.url||entry.label);
+    const label=entry.label||key;
+    const icon=isJb?'ti-database':'ti-link';
+    const clickFn=isJb
+      ?`(function(){switchSrcTab('jb');document.getElementById('jb-binid').value='${esc(entry.binId||'')}';loadFromJsonBin();})()`
+      :`loadUrl('${esc(entry.url||entry.label)}')`;
+    const lockIcon=isJb&&entry.hasKey?'<i class="ti ti-lock" style="font-size:11px;color:var(--text3)" title="Privé bin"></i>':'';
+    return`<div class="hist-item" onclick="${clickFn}">
+      <i class="ti ${icon}" style="font-size:13px;color:var(--el-c);flex-shrink:0"></i>
+      <span class="hist-url" title="${esc(label)}">${esc(label)}</span>
+      ${lockIcon}
+      <span class="hist-time">${timeAgo(entry.ts)}</span>
+      <button class="hist-del" onclick="event.stopPropagation();deleteFromHistory('${esc(key)}')" title="Verwijder">
         <i class="ti ti-x"></i>
       </button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 /* ===== FETCH ===== */
@@ -1178,7 +1269,7 @@ async function loadFromUrl(){
 async function loadUrl(url){
   document.getElementById('url-input').value=url;
   currentUrl=url;
-  setStatus('loading','Laden…');
+  setStatus('url','loading','Laden…');
   setLoadBtn(true);
   try{
     const res=await fetch(`/api/fetch-xsd?url=${encodeURIComponent(url)}`);
@@ -1190,24 +1281,93 @@ async function loadUrl(url){
       throw new Error(msg);
     }
     const xsd=await res.text();
-    setStatus('ok','Schema geladen');
-    saveToHistory(url);
+    setStatus('url','ok','Schema geladen');
+    saveToHistory({type:'url',label:url,url});
     visualize(xsd,url);
   }catch(e){
-    setStatus('error',e.message);
+    setStatus('url','error',e.message);
   }finally{setLoadBtn(false);}
 }
-function reloadCurrent(){if(currentUrl)loadUrl(currentUrl);}
+
+async function loadFromJsonBin(){
+  const binId=document.getElementById('jb-binid').value.trim();
+  const key=document.getElementById('jb-key').value.trim();
+  if(!binId){setStatus('jb','error','Voer een Bin ID in');return;}
+
+  setStatus('jb','loading','Ophalen uit JSONBin…');
+  document.getElementById('jb-load-btn').disabled=true;
+  document.getElementById('jb-load-btn').innerHTML='<i class="ti ti-loader-2 spin"></i> Laden…';
+
+  try{
+    let apiUrl=`/api/fetch-jsonbin?binId=${encodeURIComponent(binId)}`;
+    if(key) apiUrl+=`&key=${encodeURIComponent(key)}`;
+
+    const res=await fetch(apiUrl);
+    const ct=res.headers.get('content-type')||'';
+    if(!res.ok){
+      let msg=`HTTP ${res.status}`;
+      if(ct.includes('json')){
+        try{
+          const j=await res.json();
+          msg=j.error||msg;
+          if(j.hint==='structure'&&j.keys?.length){
+            msg+=` (aanwezige keys: ${j.keys.join(', ')})`;
+          }
+        }catch{}
+      }
+      throw new Error(msg);
+    }
+    const xsd=await res.text();
+    const binName=res.headers.get('x-bin-name')||binId;
+    const label=`JSONBin: ${binName}`;
+    setStatus('jb','ok',`Schema geladen uit bin "${binName}"`);
+    saveToHistory({type:'jb',label,binId,hasKey:!!key});
+    visualize(xsd,label);
+  }catch(e){
+    setStatus('jb','error',e.message);
+  }finally{
+    document.getElementById('jb-load-btn').disabled=false;
+    document.getElementById('jb-load-btn').innerHTML='<i class="ti ti-database-import"></i> Laden uit JSONBin';
+  }
+}
+
+function reloadCurrent(){
+  // Reload based on last history item
+  const h=getHistory();
+  if(!h.length)return;
+  const last=h[0];
+  if(last.type==='jb'){
+    switchSrcTab('jb');
+    document.getElementById('jb-binid').value=last.binId||'';
+    loadFromJsonBin();
+  } else {
+    loadUrl(last.url||last.label);
+  }
+}
+
 function setLoadBtn(loading){
   const btn=document.getElementById('load-btn');
   btn.disabled=loading;
   btn.innerHTML=loading?'<i class="ti ti-loader-2 spin"></i> Laden…':'<i class="ti ti-download"></i> Laden';
 }
-function setStatus(type,msg){
-  const el=document.getElementById('url-status');
+
+function setStatus(src,type,msg){
+  const elId=src==='jb'?'jb-status':'url-status';
+  const el=document.getElementById(elId);
+  if(!el)return;
   el.className='url-status '+type;
   const icon=type==='loading'?'ti-loader-2 spin':type==='error'?'ti-alert-triangle':'ti-check';
   el.innerHTML=`<i class="ti ${icon}"></i><span>${esc(msg)}</span>`;
+}
+
+/* ===== SOURCE TAB SWITCH ===== */
+function switchSrcTab(tab){
+  document.getElementById('panel-url').style.display=tab==='url'?'block':'none';
+  document.getElementById('panel-jb').style.display=tab==='jb'?'block':'none';
+  document.getElementById('tab-url').classList.toggle('active',tab==='url');
+  document.getElementById('tab-jb').classList.toggle('active',tab==='jb');
+  document.getElementById('hist-label').textContent=tab==='jb'?'Recente bins':'Recente URL\'s';
+  renderHistory();
 }
 function showHtmlHint(url){
   document.getElementById('empty-state').style.display='none';
