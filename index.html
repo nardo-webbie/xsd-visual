@@ -49,7 +49,7 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
 
 /* LEFT */
 .left{display:flex;flex-direction:column;background:var(--surface);
-  border-right:0.5px solid var(--border2);overflow:hidden}
+  border-right:0.5px solid var(--border2);overflow:hidden;height:100%}
 
 /* source tabs */
 .src-tabs{display:flex;border-bottom:0.5px solid var(--border2);background:var(--surface2)}
@@ -100,7 +100,7 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
 .url-status i{font-size:14px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spin{display:inline-block;animation:spin .8s linear infinite}
-.history-section{flex:1;overflow:auto;padding:12px 16px}
+.history-section{flex:1;overflow:auto;padding:12px 16px;display:flex;flex-direction:column}
 .history-title{font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;
   letter-spacing:.6px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
 .history-empty{font-size:12px;color:var(--text3);font-style:italic;padding:8px 0}
@@ -349,6 +349,9 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
       <div class="src-tab" id="tab-jb" onclick="switchSrcTab('jb')">
         <i class="ti ti-database"></i> JSONBin
       </div>
+      <div class="src-tab" id="tab-paste" onclick="switchSrcTab('paste')">
+        <i class="ti ti-clipboard-text"></i> Plakken
+      </div>
     </div>
 
     <!-- URL panel -->
@@ -389,7 +392,33 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
       <div class="url-status" id="jb-status"></div>
     </div>
 
-    <div class="history-section">
+    <!-- Paste panel -->
+    <div id="panel-paste" style="display:none;flex:1;display:none;flex-direction:column;overflow:hidden">
+      <div style="padding:10px 16px 8px;border-bottom:0.5px solid var(--border)">
+        <span class="url-label" style="margin-bottom:0">Plak XSD direct</span>
+      </div>
+      <textarea id="paste-input"
+        placeholder="Plak hier de volledige XSD inhoud…&#10;&#10;(&lt;?xml version=&quot;1.0&quot;...&gt; of direct &lt;xs:schema...&gt;)"
+        spellcheck="false"
+        style="flex:1;width:100%;padding:12px 16px;border:none;outline:none;
+          background:transparent;color:var(--text);resize:none;overflow:auto;
+          font-family:'Menlo','Monaco','Courier New',monospace;font-size:11.5px;
+          line-height:1.7;tab-size:2;min-height:0"
+        oninput="onPasteInput()"></textarea>
+      <div style="padding:10px 16px;border-top:0.5px solid var(--border);
+        display:flex;gap:8px;align-items:center;background:var(--surface2)">
+        <button class="btn primary" id="paste-load-btn" onclick="loadFromPaste()" style="flex:1">
+          <i class="ti ti-player-play"></i> Analyseer XSD
+        </button>
+        <button class="btn sm" onclick="clearPaste()" title="Wissen">
+          <i class="ti ti-trash"></i>
+        </button>
+        <span id="paste-chars" style="font-size:11px;color:var(--text3);font-family:'Menlo',monospace"></span>
+      </div>
+      <div class="url-status" id="paste-status" style="padding:0 16px 8px"></div>
+    </div>
+
+    <div class="history-section" id="history-wrap">
       <div class="history-title">
         <span id="hist-label">Recente URL's</span>
         <button class="btn sm" onclick="clearHistory()" style="opacity:.6" title="Wissen">
@@ -1231,7 +1260,8 @@ function timeAgo(ts){
 }
 
 function renderHistory(){
-  const activeTab=document.getElementById('tab-jb').classList.contains('active')?'jb':'url';
+  const activeTab=document.getElementById('tab-jb').classList.contains('active')?'jb':document.getElementById('tab-paste').classList.contains('active')?'paste':'url';
+  if(activeTab==='paste'){const el=document.getElementById('history-list');el&&(el.innerHTML='<div class="history-empty">Geplakte XSD wordt niet opgeslagen</div>');return;}
   const all=getHistory();
   const h=all.filter(x=>(x.type||'url')===activeTab);
   const el=document.getElementById('history-list');
@@ -1352,9 +1382,10 @@ function setLoadBtn(loading){
 }
 
 function setStatus(src,type,msg){
-  const elId=src==='jb'?'jb-status':'url-status';
+  const elId=src==='jb'?'jb-status':src==='paste'?'paste-status':'url-status';
   const el=document.getElementById(elId);
   if(!el)return;
+  if(!type&&!msg){el.className='url-status';el.innerHTML='';return;}
   el.className='url-status '+type;
   const icon=type==='loading'?'ti-loader-2 spin':type==='error'?'ti-alert-triangle':'ti-check';
   el.innerHTML=`<i class="ti ${icon}"></i><span>${esc(msg)}</span>`;
@@ -1362,12 +1393,48 @@ function setStatus(src,type,msg){
 
 /* ===== SOURCE TAB SWITCH ===== */
 function switchSrcTab(tab){
+  const isPaste=tab==='paste';
   document.getElementById('panel-url').style.display=tab==='url'?'block':'none';
   document.getElementById('panel-jb').style.display=tab==='jb'?'block':'none';
+  // paste panel uses flex column layout
+  const pp=document.getElementById('panel-paste');
+  if(isPaste){pp.style.display='flex';pp.style.flexDirection='column';}
+  else pp.style.display='none';
   document.getElementById('tab-url').classList.toggle('active',tab==='url');
   document.getElementById('tab-jb').classList.toggle('active',tab==='jb');
-  document.getElementById('hist-label').textContent=tab==='jb'?'Recente bins':'Recente URL\'s';
-  renderHistory();
+  document.getElementById('tab-paste').classList.toggle('active',isPaste);
+  // history section hidden when paste tab active (not relevant)
+  document.getElementById('history-wrap').style.display=isPaste?'none':'flex';
+  if(!isPaste){
+    document.getElementById('hist-label').textContent=tab==='jb'?'Recente bins':'Recente URL\'s';
+    renderHistory();
+  }
+}
+
+/* ===== PASTE ===== */
+function onPasteInput(){
+  const val=document.getElementById('paste-input').value;
+  const kb=(new TextEncoder().encode(val).length/1024).toFixed(0);
+  document.getElementById('paste-chars').textContent=val.length?`${kb} KB`:'';
+}
+
+function loadFromPaste(){
+  const xsd=document.getElementById('paste-input').value.trim();
+  if(!xsd){setStatus('paste','error','Geen XSD ingevoerd');return;}
+  const trimmed=xsd.trimStart();
+  if(!trimmed.startsWith('<?xml')&&!trimmed.startsWith('<xs:')&&
+     !trimmed.startsWith('<xsd:')&&!trimmed.includes('XMLSchema')){
+    setStatus('paste','error','Dit lijkt geen geldig XSD schema');return;
+  }
+  setStatus('paste','ok','Schema ingelezen');
+  saveToHistory({type:'paste',label:'Geplakte XSD ('+new Date().toLocaleTimeString('nl-NL')+')',ts:Date.now()});
+  visualize(xsd,'(geplakt)');
+}
+
+function clearPaste(){
+  document.getElementById('paste-input').value='';
+  document.getElementById('paste-chars').textContent='';
+  setStatus('paste','','');
 }
 function showHtmlHint(url){
   document.getElementById('empty-state').style.display='none';
