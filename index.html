@@ -115,7 +115,23 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
 .hist-item:hover .hist-del{opacity:1}
 .hist-del:hover{color:var(--al-c)!important}
 
-/* RIGHT */
+/* XML MODAL */
+.xml-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+  z-index:200;align-items:center;justify-content:center}
+.xml-modal-overlay.open{display:flex}
+.xml-modal{background:var(--surface);border-radius:var(--radius-lg);
+  width:min(760px,92vw);max-height:82vh;display:flex;flex-direction:column;
+  overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.25);
+  border:0.5px solid var(--border2)}
+.xml-modal-header{display:flex;align-items:center;justify-content:space-between;
+  padding:13px 18px;border-bottom:0.5px solid var(--border2);background:var(--surface2)}
+.xml-modal-title{font-size:14px;font-weight:500;display:flex;align-items:center;gap:8px}
+.xml-modal-body{flex:1;overflow:auto;padding:0;min-height:0}
+.xml-modal-body textarea{width:100%;height:100%;min-height:360px;padding:14px 16px;
+  border:none;outline:none;resize:none;background:transparent;color:var(--text);
+  font-family:'Menlo','Monaco','Courier New',monospace;font-size:12px;line-height:1.7}
+.xml-modal-footer{padding:11px 18px;border-top:0.5px solid var(--border2);
+  display:flex;gap:8px;align-items:center;background:var(--surface2)}
 .right{overflow:auto;padding:20px;background:var(--bg)}
 .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;
   height:100%;gap:14px;color:var(--text3);text-align:center}
@@ -466,6 +482,10 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
           <i class="ti ti-search"></i>
           <input type="text" id="search-input" placeholder="Zoek naam of type..." oninput="onSearch(this.value)">
         </div>
+        <div class="sep"></div>
+        <button class="btn sm" onclick="openXmlModal()" id="gen-xml-btn" title="Genereer voorbeeld XML instantie">
+          <i class="ti ti-file-plus"></i> XML voorbeeld
+        </button>
       </div>
       <div id="tree-view"><div id="tree-out"></div></div>
       <div id="hier-view" style="display:none"><div id="hier-out"></div></div>
@@ -475,7 +495,32 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
 
 </div>
 </div>
-<script>
+
+<!-- XML voorbeeld modal -->
+<div class="xml-modal-overlay" id="xml-modal" onclick="if(event.target===this)closeXmlModal()">
+  <div class="xml-modal">
+    <div class="xml-modal-header">
+      <span class="xml-modal-title">
+        <i class="ti ti-file-type-xml" style="font-size:18px;color:var(--sq-c)"></i>
+        Gegenereerd XML voorbeeld
+      </span>
+      <button class="btn sm" onclick="closeXmlModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="xml-modal-body">
+      <textarea id="xml-output" readonly spellcheck="false"></textarea>
+    </div>
+    <div class="xml-modal-footer">
+      <button class="btn primary" onclick="copyXml()" id="xml-copy-btn">
+        <i class="ti ti-copy"></i> Kopieer XML
+      </button>
+      <button class="btn sm" onclick="downloadXml()">
+        <i class="ti ti-download"></i> Downloaden
+      </button>
+      <span id="xml-copy-status" style="font-size:12px;color:var(--sq-c);margin-left:4px"></span>
+      <span id="xml-size" style="font-size:11px;color:var(--text3);margin-left:auto;font-family:'Menlo',monospace"></span>
+    </div>
+  </div>
+</div>
 /* ===== HELPERS ===== */
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function cv(v){return`var(${v})`}
@@ -1178,14 +1223,14 @@ function expandLevel(max){
 
 /* ===== VISUALIZE ===== */
 function visualize(xsdText,url){
-  idCtr=0;statsMap={};seenTypes=new Set();typeMap={};
+  idCtr=0;statsMap={};seenTypes=new Set();typeMap={};lastParsedRoot=null;
   try{
     const parser=new DOMParser();
     const doc=parser.parseFromString(xsdText,'application/xml');
     const errEl=doc.querySelector('parsererror');
     if(errEl) throw new Error('XML parse fout: '+(errEl.querySelector('div')?.textContent||errEl.textContent));
     const rootParsed=buildTree(doc.documentElement);
-    typeMap=buildTypeMap(rootParsed);
+    typeMap=buildTypeMap(rootParsed);lastParsedRoot=rootParsed;
 
     document.getElementById('empty-state').style.display='none';
     document.getElementById('viz').style.display='block';
@@ -1239,6 +1284,144 @@ function saveToHistory(entry){
   h.unshift({...entry,ts:Date.now()});
   if(h.length>20)h=h.slice(0,20);
   localStorage.setItem(HIST_KEY,JSON.stringify(h));
+
+/* ===== XML SAMPLE GENERATOR ===== */
+const SAMPLE_VALS={
+  string:'sample',normalizedString:'sample',token:'sample',language:'nl',
+  integer:'1',int:'1',long:'1',short:'1',byte:'1',
+  positiveInteger:'1',nonNegativeInteger:'0',negativeInteger:'-1',
+  unsignedInt:'1',unsignedLong:'1',unsignedShort:'1',unsignedByte:'0',
+  decimal:'1.00',float:'1.0',double:'1.0',boolean:'true',
+  date:'2024-01-01',dateTime:'2024-01-01T00:00:00',time:'12:00:00',
+  duration:'P1D',gYear:'2024',gMonth:'--01',gDay:'---01',
+  gYearMonth:'2024-01',gMonthDay:'--01-01',
+  anyURI:'http://example.com',base64Binary:'c2FtcGxl',hexBinary:'48656C6C6F',
+  ID:'id-1',IDREF:'id-1',NCName:'name',Name:'name',QName:'name',NMTOKEN:'token',
+};
+function xmlSampleVal(t){return SAMPLE_VALS[t]||'sample';}
+function escXml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function getEnumVals(stNode){
+  if(!stNode)return null;
+  const r=stNode.children.find(c=>c.ln==='restriction');
+  if(!r)return null;
+  const e=r.children.filter(c=>c.ln==='enumeration').map(c=>c.a.value||'');
+  return e.length?e:null;
+}
+function genAttrsFromType(ctNode,tm){
+  let s='';const seen=new Set();
+  const addAttr=(attr)=>{
+    const n=attr.a.name||'';if(!n||seen.has(n))return;seen.add(n);
+    const use=attr.a.use||'optional',def=attr.a.default||'';
+    const tn=stripNs(attr.a.type||'');
+    if(use==='required'||def){
+      const val=def||(tm[tn]&&tm[tn].ln==='simpleType'?(getEnumVals(tm[tn])||['sample'])[0]:xmlSampleVal(tn));
+      s+=` ${n}="${escXml(val)}"`;
+    }
+  };
+  const walk=(node)=>{
+    const cc=node.children.find(c=>c.ln==='complexContent'||c.ln==='simpleContent');
+    if(cc){const inner=cc.children.find(c=>c.ln==='extension'||c.ln==='restriction');
+      if(inner){const base=stripNs(inner.a.base||'');if(base&&tm[base])walk(tm[base]);inner.children.filter(c=>c.ln==='attribute').forEach(addAttr);}}
+    node.children.filter(c=>c.ln==='attribute').forEach(addAttr);
+  };
+  walk(ctNode);return s;
+}
+function genElement(elNode,tm,depth,visited){
+  const name=elNode.a.name||elNode.a.ref||'';if(!name)return'';
+  const ind='  '.repeat(depth);const tn=stripNs(elNode.a.type||'');
+  const inlineCx=elNode.children.find(c=>c.ln==='complexType');
+  const inlineSi=elNode.children.find(c=>c.ln==='simpleType');
+  if(!inlineCx&&!inlineSi&&XS_BUILTINS.has(tn))return`${ind}<${name}>${escXml(xmlSampleVal(tn))}</${name}>`;
+  const siNode=inlineSi||(tn&&tm[tn]&&tm[tn].ln==='simpleType'?tm[tn]:null);
+  if(siNode&&!inlineCx){const enums=getEnumVals(siNode);const r=siNode.children.find(c=>c.ln==='restriction');const base=stripNs(r?.a?.base||'');return`${ind}<${name}>${escXml(enums?enums[0]:xmlSampleVal(base||'string'))}</${name}>`;}
+  const cxNode=inlineCx||(tn&&tm[tn]&&tm[tn].ln==='complexType'?tm[tn]:null);
+  if(!cxNode)return`${ind}<${name}>sample</${name}>`;
+  if(tn&&visited.has(tn))return`${ind}<${name}/><!-- recycled ${escXml(tn)} -->`;
+  const v2=new Set(visited);if(tn)v2.add(tn);
+  const attrStr=genAttrsFromType(cxNode,tm);
+  const childLines=genComplexChildren(cxNode,tm,depth+1,v2);
+  if(childLines.length)return[`${ind}<${name}${attrStr}>`,...childLines,`${ind}</${name}>`].join('\n');
+  return`${ind}<${name}${attrStr}/>`;
+}
+function genComplexChildren(ctNode,tm,depth,visited){
+  const lines=[];
+  const cc=ctNode.children.find(c=>c.ln==='complexContent'||c.ln==='simpleContent');
+  const grp=ctNode.children.find(c=>['sequence','choice','all'].includes(c.ln));
+  if(cc){const inner=cc.children.find(c=>c.ln==='extension'||c.ln==='restriction');
+    if(inner){const base=stripNs(inner.a.base||'');
+      if(base&&tm[base]&&!visited.has(base)){const v2=new Set(visited);v2.add(base);lines.push(...genComplexChildren(tm[base],tm,depth,v2));}
+      const ig=inner.children.find(c=>['sequence','choice','all'].includes(c.ln));
+      if(ig)lines.push(...genGroup(ig,tm,depth,visited));}}
+  else if(grp)lines.push(...genGroup(grp,tm,depth,visited));
+  return lines;
+}
+function genGroup(grpNode,tm,depth,visited){
+  const ln=grpNode.ln,minO=parseInt(grpNode.a.minOccurs||'1'),lines=[];
+  const items=grpNode.children.filter(c=>c.ln==='element'||['sequence','choice','all'].includes(c.ln)||c.ln==='group');
+  if(ln==='choice'){
+    if(minO===0)return lines;
+    const first=items.find(c=>c.ln==='element')||items[0];if(!first)return lines;
+    if(first.ln==='element'){const r=genElement(first,tm,depth,visited);if(r)lines.push(r);}
+    else lines.push(...genGroup(first,tm,depth,visited));
+  }else{
+    for(const item of items){
+      const min=parseInt(item.a?.minOccurs||'1');if(min===0)continue;
+      if(item.ln==='element'){const r=genElement(item,tm,depth,visited);if(r)lines.push(r);}
+      else if(['sequence','choice','all'].includes(item.ln))lines.push(...genGroup(item,tm,depth,visited));
+      else if(item.ln==='group'){const ref=stripNs(item.a.ref||'');
+        if(ref&&tm[ref]&&!visited.has(ref)){const inner=tm[ref].children.find(c=>['sequence','choice','all'].includes(c.ln));if(inner)lines.push(...genGroup(inner,tm,depth,visited));}}
+    }
+  }
+  return lines;
+}
+function generateSampleXml(rootParsed,tm){
+  const rootEls=rootParsed.children.filter(c=>c.ln==='element');
+  if(!rootEls.length)return'<!-- Geen root elementen gevonden -->';
+  const tns=rootParsed.a.targetNamespace||'';
+  const lines=['<?xml version="1.0" encoding="UTF-8"?>'];
+  if(tns)lines.push(`<!-- targetNamespace: ${escXml(tns)} -->`);
+  for(const el of rootEls){
+    const tn=stripNs(el.a.type||'');
+    const cxNode=el.children.find(c=>c.ln==='complexType')||(tn&&tm[tn]?tm[tn]:null);
+    const attrStr=cxNode&&cxNode.ln==='complexType'?genAttrsFromType(cxNode,tm):'';
+    const nsDecl=tns?` xmlns="${escXml(tns)}"`:'';
+    const name=el.a.name||'root';
+    if(!cxNode||cxNode.ln!=='complexType'){lines.push(`<${name}${nsDecl}>sample</${name}>`)}
+    else{const v=new Set([tn].filter(Boolean));const cl=genComplexChildren(cxNode,tm,1,v);
+      if(cl.length){lines.push(`<${name}${nsDecl}${attrStr}>`);lines.push(...cl);lines.push(`</${name}>`);}
+      else lines.push(`<${name}${nsDecl}${attrStr}/>`);}
+    break;
+  }
+  return lines.join('\n');
+}
+
+/* ===== XML MODAL ===== */
+let lastParsedRoot=null;
+function openXmlModal(){
+  if(!lastParsedRoot)return;
+  const xml=generateSampleXml(lastParsedRoot,typeMap);
+  document.getElementById('xml-output').value=xml;
+  const kb=(new TextEncoder().encode(xml).length/1024).toFixed(1);
+  document.getElementById('xml-size').textContent=kb+' KB';
+  document.getElementById('xml-modal').classList.add('open');
+}
+function closeXmlModal(){document.getElementById('xml-modal').classList.remove('open');}
+async function copyXml(){
+  const val=document.getElementById('xml-output').value;
+  try{await navigator.clipboard.writeText(val);
+    const btn=document.getElementById('xml-copy-btn');
+    btn.innerHTML='<i class="ti ti-check"></i> Gekopieerd!';
+    document.getElementById('xml-copy-status').textContent='✓';
+    setTimeout(()=>{btn.innerHTML='<i class="ti ti-copy"></i> Kopieer XML';document.getElementById('xml-copy-status').textContent='';},2000);
+  }catch{document.getElementById('xml-copy-status').textContent='Mislukt';}
+}
+function downloadXml(){
+  const val=document.getElementById('xml-output').value;
+  const a=document.createElement('a');
+  a.href='data:application/xml;charset=utf-8,'+encodeURIComponent(val);
+  a.download='sample.xml';a.click();
+}
+
   renderHistory();
 }
 
