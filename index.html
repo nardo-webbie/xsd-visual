@@ -504,6 +504,10 @@ header .sub{font-size:12px;color:var(--text3);margin-left:2px}
         <i class="ti ti-file-type-xml" style="font-size:18px;color:var(--sq-c)"></i>
         Gegenereerd XML voorbeeld
       </span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;user-select:none;margin-left:auto;margin-right:12px">
+        <input type="checkbox" id="xml-opt-toggle" checked onchange="onOptToggle()" style="cursor:pointer">
+        Inclusief optionele velden
+      </label>
       <button class="btn sm" onclick="closeXmlModal()"><i class="ti ti-x"></i></button>
     </div>
     <div class="xml-modal-body">
@@ -555,6 +559,7 @@ const TRACKED=new Set(['element','complexType','simpleType','sequence','choice',
 
 let idCtr=0,statsMap={},seenTypes=new Set(),currentUrl='',currentView='tree';
 let typeMap={}; // name → parsed node (for segment view)
+let globalElMap={}; // name → global element node (for ref resolution in XML generator)
 
 /* ===== PARSE ===== */
 function getDoc(xn){
@@ -625,6 +630,16 @@ function buildTypeMap(rootNode){
   const map={};
   for(const c of rootNode.children){
     if((c.ln==='complexType'||c.ln==='simpleType'||c.ln==='group'||c.ln==='attributeGroup')&&c.a.name){
+      map[c.a.name]=c;
+    }
+  }
+  return map;
+}
+
+function buildGlobalElementMap(rootNode){
+  const map={};
+  for(const c of rootNode.children){
+    if(c.ln==='element'&&c.a.name){
       map[c.a.name]=c;
     }
   }
@@ -1231,7 +1246,7 @@ function visualize(xsdText,url){
     const errEl=doc.querySelector('parsererror');
     if(errEl) throw new Error('XML parse fout: '+(errEl.querySelector('div')?.textContent||errEl.textContent));
     const rootParsed=buildTree(doc.documentElement);
-    typeMap=buildTypeMap(rootParsed);lastParsedRoot=rootParsed;
+    typeMap=buildTypeMap(rootParsed);globalElMap=buildGlobalElementMap(rootParsed);lastParsedRoot=rootParsed;
 
     document.getElementById('empty-state').style.display='none';
     document.getElementById('viz').style.display='block';
@@ -1316,7 +1331,7 @@ function genAttrsFromType(ctNode,tm){
     const n=attr.a.name||'';if(!n||seen.has(n))return;seen.add(n);
     const use=attr.a.use||'optional',def=attr.a.default||'';
     const tn=stripNs(attr.a.type||'');
-    if(use==='required'||def){
+    if(use==='required'||def||genIncludeOptional){
       const val=def||(tm[tn]&&tm[tn].ln==='simpleType'?(getEnumVals(tm[tn])||['sample'])[0]:xmlSampleVal(tn));
       s+=` ${n}="${escXml(val)}"`;
     }
@@ -1330,17 +1345,46 @@ function genAttrsFromType(ctNode,tm){
   walk(ctNode);return s;
 }
 function genElement(elNode,tm,depth,visited){
-  const name=elNode.a.name||elNode.a.ref||'';if(!name)return'';
-  const ind='  '.repeat(depth);const tn=stripNs(elNode.a.type||'');
-  const inlineCx=elNode.children.find(c=>c.ln==='complexType');
-  const inlineSi=elNode.children.find(c=>c.ln==='simpleType');
+  let workNode=elNode;
+  const isRef=!elNode.a.name&&elNode.a.ref;
+  let name=stripNs(elNode.a.name||elNode.a.ref||'');
+  if(!name)return'';
+
+  // Resolve ref="" to the global element definition (common in EDI/UN-CEFACT/Riege schemas)
+  if(isRef){
+    const refName=stripNs(elNode.a.ref);
+    const refKey=`${refName}::${depth}`;
+    if(globalElMap[refName]&&!visited.has('el:'+refName)){
+      workNode=globalElMap[refName];
+    } else if(globalElMap[refName]&&visited.has('el:'+refName)){
+      return`${'  '.repeat(depth)}<${name}/><!-- ↻ ${escXml(refName)} -->`;
+    }
+    // occurs (minOccurs/maxOccurs) on the REFERRING element still governs presence,
+    // but structure comes from workNode
+  }
+
+  const ind='  '.repeat(depth);const tn=stripNs(workNode.a.type||'');
+  const inlineCx=workNode.children.find(c=>c.ln==='complexType');
+  const inlineSi=workNode.children.find(c=>c.ln==='simpleType');
+
   if(!inlineCx&&!inlineSi&&XS_BUILTINS.has(tn))return`${ind}<${name}>${escXml(xmlSampleVal(tn))}</${name}>`;
   const siNode=inlineSi||(tn&&tm[tn]&&tm[tn].ln==='simpleType'?tm[tn]:null);
   if(siNode&&!inlineCx){const enums=getEnumVals(siNode);const r=siNode.children.find(c=>c.ln==='restriction');const base=stripNs(r?.a?.base||'');return`${ind}<${name}>${escXml(enums?enums[0]:xmlSampleVal(base||'string'))}</${name}>`;}
   const cxNode=inlineCx||(tn&&tm[tn]&&tm[tn].ln==='complexType'?tm[tn]:null);
   if(!cxNode)return`${ind}<${name}>sample</${name}>`;
-  if(tn&&visited.has(tn))return`${ind}<${name}/><!-- recycled ${escXml(tn)} -->`;
-  const v2=new Set(visited);if(tn)v2.add(tn);
+  if(tn&&visited.has(tn))return`${ind}<${name}/><!-- ↻ ${escXml(tn)} -->`;
+  const v2=new Set(visited);if(tn)v2.add(tn);if(isRef)v2.add('el:'+stripNs(elNode.a.ref));
+
+  // simpleContent: element has text content + attributes, no child elements
+  const simpleContentNode=cxNode.children.find(c=>c.ln==='simpleContent');
+  if(simpleContentNode){
+    const inner=simpleContentNode.children.find(c=>c.ln==='extension'||c.ln==='restriction');
+    const attrStr=inner?genAttrsFromType(cxNode,tm):'';
+    const base=stripNs(inner?.a?.base||'');
+    const textVal=xmlSampleVal(base||'string');
+    return`${ind}<${name}${attrStr}>${escXml(textVal)}</${name}>`;
+  }
+
   const attrStr=genAttrsFromType(cxNode,tm);
   const childLines=genComplexChildren(cxNode,tm,depth+1,v2);
   if(childLines.length)return[`${ind}<${name}${attrStr}>`,...childLines,`${ind}</${name}>`].join('\n');
@@ -1358,17 +1402,20 @@ function genComplexChildren(ctNode,tm,depth,visited){
   else if(grp)lines.push(...genGroup(grp,tm,depth,visited));
   return lines;
 }
+let genIncludeOptional=true; // toggle: show full structure (incl. optional) vs minimal valid instance
+
 function genGroup(grpNode,tm,depth,visited){
   const ln=grpNode.ln,minO=parseInt(grpNode.a.minOccurs||'1'),lines=[];
   const items=grpNode.children.filter(c=>c.ln==='element'||['sequence','choice','all'].includes(c.ln)||c.ln==='group');
   if(ln==='choice'){
-    if(minO===0)return lines;
+    if(minO===0&&!genIncludeOptional)return lines;
     const first=items.find(c=>c.ln==='element')||items[0];if(!first)return lines;
     if(first.ln==='element'){const r=genElement(first,tm,depth,visited);if(r)lines.push(r);}
     else lines.push(...genGroup(first,tm,depth,visited));
   }else{
     for(const item of items){
-      const min=parseInt(item.a?.minOccurs||'1');if(min===0)continue;
+      const min=parseInt(item.a?.minOccurs||'1');
+      if(min===0&&!genIncludeOptional)continue;
       if(item.ln==='element'){const r=genElement(item,tm,depth,visited);if(r)lines.push(r);}
       else if(['sequence','choice','all'].includes(item.ln))lines.push(...genGroup(item,tm,depth,visited));
       else if(item.ln==='group'){const ref=stripNs(item.a.ref||'');
@@ -1402,11 +1449,20 @@ function generateSampleXml(rootParsed,tm){
 let lastParsedRoot=null;
 function openXmlModal(){
   if(!lastParsedRoot)return;
+  genIncludeOptional=document.getElementById('xml-opt-toggle').checked;
   const xml=generateSampleXml(lastParsedRoot,typeMap);
   document.getElementById('xml-output').value=xml;
   const kb=(new TextEncoder().encode(xml).length/1024).toFixed(1);
   document.getElementById('xml-size').textContent=kb+' KB';
   document.getElementById('xml-modal').classList.add('open');
+}
+function onOptToggle(){
+  if(!lastParsedRoot)return;
+  genIncludeOptional=document.getElementById('xml-opt-toggle').checked;
+  const xml=generateSampleXml(lastParsedRoot,typeMap);
+  document.getElementById('xml-output').value=xml;
+  const kb=(new TextEncoder().encode(xml).length/1024).toFixed(1);
+  document.getElementById('xml-size').textContent=kb+' KB';
 }
 function closeXmlModal(){document.getElementById('xml-modal').classList.remove('open');}
 async function copyXml(){
